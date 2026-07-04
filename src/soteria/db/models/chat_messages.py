@@ -1,0 +1,1 @@
+"""`chat_messages` table model — see references/db_schema.md. Implementation deferred."""
