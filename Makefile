@@ -1,5 +1,10 @@
 .PHONY: install lint format typecheck test up down worker ci
 
+# Keep the venv out of ~/Desktop: on this machine Desktop is iCloud-synced,
+# and iCloud's background sync races with uv's rapid venv writes and
+# corrupts it (observed as broken symlinks / silent import failures).
+export UV_PROJECT_ENVIRONMENT := $(HOME)/.venvs/soteria
+
 install:
 	uv sync
 
