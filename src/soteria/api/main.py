@@ -4,9 +4,10 @@ No auth system — see soteria.plaid for the underlying Plaid calls and
 persistence helpers.
 """
 
+import traceback
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -25,7 +26,7 @@ from soteria.plaid.services.sync_service import sync_item_transactions
 from soteria.plaid.webhook_dedup import claim_webhook_event
 from soteria.plaid.webhook_events import resolve_sync_event
 from soteria.plaid.webhook_verification import is_webhook_authentic
-from soteria.worker.tasks.plaid_sync import sync_plaid_item_transactions
+from soteria.worker.tasks.plaid_sync import sync_plaid_item
 
 app = FastAPI(title="Soteria Plaid Sandbox Test")
 
@@ -94,6 +95,10 @@ class PlaidWebhookPayload(BaseModel):
     webhook_code: str
     item_id: str
     new_transactions: int | None = None
+
+
+class WebhookAckResponse(BaseModel):
+    status: str = "ok"
 
 
 @app.get("/", include_in_schema=False)
@@ -173,32 +178,45 @@ def transactions_sync(payload: SyncTransactionsRequest) -> SyncTransactionsRespo
 
 
 @app.post("/plaid/webhook")
-async def plaid_webhook(request: Request) -> dict[str, str]:
-    body = await request.body()
-
-    if get_settings().plaid_webhook_verification_enabled:
-        signed_jwt = request.headers.get("Plaid-Verification")
-        if not signed_jwt or not is_webhook_authentic(body, signed_jwt):
-            raise HTTPException(status_code=401, detail="Webhook signature verification failed")
-
+async def plaid_webhook(request: Request) -> WebhookAckResponse:
+    """Always acknowledges with {"status": "ok"} — Plaid retries on any non-200/failure,
+    and retrying won't fix a sync failure or a DB/Redis/broker outage on our side.
+    Every rejection (bad signature, malformed body, unknown item, duplicate delivery,
+    unmapped code, or an unexpected exception) is handled internally and logged;
+    none of it is allowed to surface as a failed response to Plaid.
+    """
     try:
-        payload = PlaidWebhookPayload.model_validate_json(body)
-    except ValidationError as exc:
-        raise HTTPException(status_code=400, detail="Malformed webhook payload") from exc
+        body = await request.body()
 
-    plaid_item = get_plaid_item_by_item_id(payload.item_id)
-    if plaid_item is None:
-        raise HTTPException(status_code=404, detail="Unknown item_id")
+        if get_settings().plaid_webhook_verification_enabled:
+            signed_jwt = request.headers.get("Plaid-Verification")
+            if not signed_jwt or not is_webhook_authentic(body, signed_jwt):
+                print("Webhook signature verification failed; dropping")
+                return WebhookAckResponse()
 
-    sync_event = resolve_sync_event(payload.webhook_code)
-    if sync_event is None:
-        print(f"No mapped action for webhook_code={payload.webhook_code}; ignoring")
-        return {"status": "ignored"}
+        try:
+            payload = PlaidWebhookPayload.model_validate_json(body)
+        except ValidationError:
+            print("Malformed webhook payload; dropping")
+            return WebhookAckResponse()
 
-    if not claim_webhook_event(payload.item_id, payload.webhook_code):
-        print(f"Duplicate delivery: webhook_code={payload.webhook_code} item {payload.item_id}")
-        return {"status": "duplicate", "event": sync_event.value}
+        plaid_item = get_plaid_item_by_item_id(payload.item_id)
+        if plaid_item is None:
+            print(f"Unknown item_id={payload.item_id}; dropping")
+            return WebhookAckResponse()
 
-    print(f"webhook_code={payload.webhook_code} -> {sync_event.value} for item {payload.item_id}")
-    sync_plaid_item_transactions.delay(str(plaid_item.id))
-    return {"status": "enqueued", "event": sync_event.value}
+        sync_event = resolve_sync_event(payload.webhook_code)
+        if sync_event is None:
+            print(f"No mapped action for webhook_code={payload.webhook_code}; ignoring")
+            return WebhookAckResponse()
+
+        if not claim_webhook_event(payload.item_id, payload.webhook_code):
+            print(f"Duplicate delivery: webhook_code={payload.webhook_code} item {payload.item_id}")
+            return WebhookAckResponse()
+
+        print(f"{payload.webhook_code} -> {sync_event.value} for item {payload.item_id}")
+        sync_plaid_item.delay(payload.item_id)
+    except Exception:
+        traceback.print_exc()
+
+    return WebhookAckResponse()
