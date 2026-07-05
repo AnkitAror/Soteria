@@ -14,6 +14,8 @@ from soteria.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from soteria.db.models.bank_accounts import BankAccount
+    from soteria.db.models.merchant_profiles import MerchantProfile
+    from soteria.db.models.transaction_analysis import TransactionAnalysis
     from soteria.db.models.users import User
 
 
@@ -25,9 +27,9 @@ class Transaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("bank_accounts.id"), nullable=False, index=True
     )
     plaid_transaction_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
-    # No FK constraint yet: merchant_profiles is out of scope/unimplemented.
-    # Add ForeignKey("merchant_profiles.id") + relationship once that model lands.
-    merchant_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    merchant_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("merchant_profiles.id"), nullable=True, index=True
+    )
     merchant_name: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str] = mapped_column(String, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
@@ -42,3 +44,7 @@ class Transaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     user: Mapped["User"] = relationship(back_populates="transactions")
     account: Mapped["BankAccount"] = relationship(back_populates="transactions")
+    merchant: Mapped["MerchantProfile | None"] = relationship(back_populates="transactions")
+    analysis: Mapped["TransactionAnalysis | None"] = relationship(
+        back_populates="transaction", uselist=False
+    )
