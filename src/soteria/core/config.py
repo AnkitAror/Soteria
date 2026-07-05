@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
+    plaid_client_id: str = ""
+    plaid_secret: str = ""
+    plaid_env: str = "sandbox"
+
+    encryption_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Soteria — Plaid Sandbox Test</title>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+</head>
+<body>
+  <h1>Soteria — Plaid Sandbox Test</h1>
+  <button id="connect">Connect bank</button>
+  <button id="view-accounts" disabled>View accounts</button>
+  <button id="sync-transactions" disabled>Sync transactions</button>
+  <p id="status"></p>
+  <pre id="result"></pre>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const viewAccountsBtn = document.getElementById("view-accounts");
+    const syncTransactionsBtn = document.getElementById("sync-transactions");
+    let lastPlaidItemId = null;
+
+    async function exchangePublicToken(publicToken, institutionId, institutionName) {
+      statusEl.textContent = "Exchanging public_token...";
+      const res = await fetch("/api/plaid/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          public_token: publicToken,
+          institution_id: institutionId,
+          institution_name: institutionName,
+        }),
+      });
+      if (!res.ok) {
+        statusEl.textContent = "Exchange failed: " + res.status;
+        return;
+      }
+      const data = await res.json();
+      statusEl.textContent = "Saved.";
+      resultEl.textContent = JSON.stringify(data, null, 2);
+      lastPlaidItemId = data.plaid_item_id;
+      viewAccountsBtn.disabled = false;
+      syncTransactionsBtn.disabled = false;
+    }
+
+    async function viewAccounts() {
+      statusEl.textContent = "Fetching accounts...";
+      const res = await fetch("/api/plaid/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plaid_item_id: lastPlaidItemId }),
+      });
+      if (!res.ok) {
+        statusEl.textContent = "Accounts fetch failed: " + res.status;
+        return;
+      }
+      const data = await res.json();
+      statusEl.textContent = "Accounts saved.";
+      resultEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function syncTransactions() {
+      statusEl.textContent = "Syncing transactions...";
+      const res = await fetch("/api/plaid/transactions/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plaid_item_id: lastPlaidItemId }),
+      });
+      if (!res.ok) {
+        statusEl.textContent = "Transactions sync failed: " + res.status;
+        return;
+      }
+      const data = await res.json();
+      statusEl.textContent = "Transactions synced.";
+      resultEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function connect() {
+      statusEl.textContent = "Creating link_token...";
+      resultEl.textContent = "";
+      const res = await fetch("/api/plaid/link-token", { method: "POST" });
+      if (!res.ok) {
+        statusEl.textContent = "link_token creation failed: " + res.status;
+        return;
+      }
+      const { link_token: linkToken } = await res.json();
+
+      const handler = Plaid.create({
+        token: linkToken,
+        onSuccess: (publicToken, metadata) => {
+          exchangePublicToken(publicToken, metadata.institution.institution_id, metadata.institution.name);
+        },
+        onExit: (err) => {
+          if (err) {
+            statusEl.textContent = "Link exited with error: " + JSON.stringify(err);
+          }
+        },
+      });
+      statusEl.textContent = "Opening Plaid Link...";
+      handler.open();
+    }
+
+    document.getElementById("connect").addEventListener("click", connect);
+    viewAccountsBtn.addEventListener("click", viewAccounts);
+    syncTransactionsBtn.addEventListener("click", syncTransactions);
+  </script>
+</body>
+</html>

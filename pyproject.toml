@@ -11,6 +11,10 @@ dependencies = [
     "psycopg[binary]>=3.1",
     "alembic>=1.18.5",
     "pgvector>=0.4.2",
+    "plaid-python>=29.0.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "cryptography>=43",
 ]
 
 [dependency-groups]
@@ -65,6 +69,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pgvector.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "plaid.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test up down worker ci migrate migrate-autogenerate migrate-down
+.PHONY: install lint format typecheck test up down worker api ci migrate migrate-autogenerate migrate-down
 
 # Keep the venv out of ~/Desktop: on this machine Desktop is iCloud-synced,
 # and iCloud's background sync races with uv's rapid venv writes and
@@ -28,6 +28,9 @@ down:
 
 worker:
 	uv run celery -A soteria.worker.celery_app worker --loglevel=info
+
+api:
+	uv run uvicorn soteria.api.main:app --reload
 
 ci: lint typecheck test
 
