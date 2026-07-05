@@ -1,9 +1,9 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
+
+import soteria.db.models  # noqa: F401  # registers models on Base.metadata for autogenerate
 from soteria.core.config import get_settings
 from soteria.db.base import Base
 from soteria.db.session import _psycopg_url
