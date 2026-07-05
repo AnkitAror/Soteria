@@ -51,8 +51,22 @@ def save_added_transactions(
     with SessionLocal() as session:
         account_id_by_plaid_account_id = _account_id_map(session, plaid_item.id)
 
+        # Idempotency: if a crash happens between this commit and the cursor
+        # update, the next sync replays the same "added" batch from Plaid.
+        # Skip anything already persisted instead of hitting the UNIQUE
+        # constraint on plaid_transaction_id.
+        incoming_ids = [txn.transaction_id for txn in added]
+        existing_ids = {
+            row[0]
+            for row in session.query(Transaction.plaid_transaction_id)
+            .filter(Transaction.plaid_transaction_id.in_(incoming_ids))
+            .all()
+        }
+
         transactions = []
         for txn in added:
+            if txn.transaction_id in existing_ids:
+                continue
             account_id = account_id_by_plaid_account_id.get(txn.account_id)
             if account_id is None:
                 print(f"Skipping txn {txn.transaction_id}: unknown account {txn.account_id}")
@@ -109,6 +123,7 @@ def soft_delete_removed_transactions(removed: list[RemovedTransaction]) -> int:
         )
         now = datetime.now(UTC)
         for row in rows:
-            row.removed_at = now
+            if row.removed_at is None:
+                row.removed_at = now
         session.commit()
         return len(rows)

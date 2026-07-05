@@ -57,6 +57,12 @@ def get_plaid_item(plaid_item_id: str) -> PlaidItem:
         return plaid_item
 
 
+def get_plaid_item_by_item_id(item_id: str) -> PlaidItem | None:
+    """Look up by Plaid's own item_id string (as delivered in webhooks), not our internal id."""
+    with SessionLocal() as session:
+        return session.query(PlaidItem).filter_by(plaid_item_id=item_id).one_or_none()
+
+
 def get_decrypted_access_token(plaid_item: PlaidItem) -> str:
     return decrypt_secret(plaid_item.plaid_access_token)
 

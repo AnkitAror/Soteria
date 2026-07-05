@@ -1,8 +1,4 @@
-"""Celery application instance.
-
-No task modules exist yet; once soteria.worker.tasks gains real modules,
-list them in `include=[...]` below.
-"""
+"""Celery application instance."""
 
 from celery import Celery
 
@@ -14,6 +10,7 @@ app = Celery(
     "soteria",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
+    include=["soteria.worker.tasks.plaid_sync"],
 )
 
 app.conf.update(
