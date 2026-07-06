@@ -1,0 +1,80 @@
+"""Persist recurring outflow streams as `subscriptions` rows and link transactions to them.
+
+Get-or-create is keyed on (user_id, normalized_name) — the same merchant
+normalizer used for transaction enrichment, so "Spotify AB", "SPOTIFY USA",
+etc. all resolve to one subscription row.
+"""
+
+import uuid
+from decimal import Decimal
+
+from plaid.model.transaction_stream import TransactionStream
+
+from soteria.analysis.services.merchant_normalization import normalize_merchant
+from soteria.analysis.transaction_analysis import save_analysis
+from soteria.db.models.subscriptions import Subscription, SubscriptionStatus
+from soteria.db.models.transactions import Transaction
+from soteria.db.session import SessionLocal
+
+
+def save_subscription(user_id: uuid.UUID, stream: TransactionStream) -> Subscription:
+    # Plaid's dynamic models raise ApiAttributeError for an optional field
+    # that's entirely absent from the response (not just null) — getattr
+    # with a default sidesteps that instead of a plain attribute access.
+    merchant_name = getattr(stream, "merchant_name", None) or stream.description
+    normalized_name = normalize_merchant(merchant_name)
+    average_cost = Decimal(str(abs(stream.average_amount.amount)))
+    currency = (
+        getattr(stream.average_amount, "iso_currency_code", None)
+        or getattr(stream.average_amount, "unofficial_currency_code", None)
+        or "USD"
+    )
+    billing_cycle = str(stream.frequency).lower()
+    status = SubscriptionStatus.ACTIVE if stream.is_active else SubscriptionStatus.CANCELLED
+
+    with SessionLocal() as session:
+        subscription = (
+            session.query(Subscription)
+            .filter_by(user_id=user_id, normalized_name=normalized_name)
+            .one_or_none()
+        )
+        if subscription is None:
+            subscription = Subscription(
+                user_id=user_id,
+                merchant_name=merchant_name,
+                normalized_name=normalized_name,
+                average_cost=average_cost,
+                currency=currency,
+                billing_cycle=billing_cycle,
+                status=status,
+            )
+            session.add(subscription)
+        else:
+            if subscription.average_cost != average_cost:
+                subscription.last_price_change_amount = average_cost - subscription.average_cost
+            subscription.average_cost = average_cost
+            subscription.currency = currency
+            subscription.billing_cycle = billing_cycle
+            subscription.status = status
+
+        subscription.last_charge = stream.last_date
+        subscription.next_expected_charge = stream.predicted_next_date
+        session.commit()
+        session.refresh(subscription)
+        return subscription
+
+
+def link_transactions_to_subscription(
+    subscription_id: uuid.UUID, plaid_transaction_ids: list[str]
+) -> int:
+    with SessionLocal() as session:
+        transaction_ids = [
+            row[0]
+            for row in session.query(Transaction.id)
+            .filter(Transaction.plaid_transaction_id.in_(plaid_transaction_ids))
+            .all()
+        ]
+
+    for transaction_id in transaction_ids:
+        save_analysis(transaction_id, subscription_id=subscription_id)
+    return len(transaction_ids)

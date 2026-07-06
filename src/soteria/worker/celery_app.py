@@ -11,6 +11,7 @@ app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
     include=[
+        "soteria.worker.tasks.detect_subscriptions",
         "soteria.worker.tasks.health",
         "soteria.worker.tasks.plaid_sync",
         "soteria.worker.tasks.process_transaction",

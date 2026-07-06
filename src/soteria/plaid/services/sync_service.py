@@ -1,7 +1,9 @@
 """Transaction sync service: given a Plaid Item, download all new transactions.
 
-Orchestrates the existing Plaid sync + persistence building blocks. No
-Celery, no scoring/analysis — those are separate concerns.
+Orchestrates the existing Plaid sync + persistence building blocks, then
+fans each newly-inserted transaction out to the enrichment pipeline. No
+scoring/analysis happens here — that's the enrichment task's job, running
+asynchronously.
 """
 
 from dataclasses import dataclass
@@ -15,6 +17,7 @@ from soteria.plaid.transactions import (
     soft_delete_removed_transactions,
 )
 from soteria.plaid.transactions_sync import sync_transactions
+from soteria.worker.tasks.process_transaction import process_transaction
 
 
 @dataclass
@@ -32,6 +35,10 @@ def sync_item_transactions(plaid_item: PlaidItem) -> TransactionSyncResult:
     modified = save_modified_transactions(plaid_item, sync_result.modified)
     removed_count = soft_delete_removed_transactions(sync_result.removed)
     update_sync_cursor(plaid_item.id, sync_result.next_cursor)
+
+    for transaction in added:
+        process_transaction.delay(str(transaction.id))
+
     return TransactionSyncResult(
         added=added,
         modified=modified,
