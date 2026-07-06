@@ -9,7 +9,13 @@ from soteria.plaid.services.subscription_service import detect_subscriptions
 from soteria.worker.celery_app import app
 
 
-@app.task(name="analysis.detect_subscriptions")
+@app.task(
+    name="analysis.detect_subscriptions",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def detect_subscriptions_task(item_id: str) -> None:
     plaid_item = get_plaid_item_by_item_id(item_id)
     if plaid_item is None:

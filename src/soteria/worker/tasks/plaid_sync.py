@@ -10,7 +10,13 @@ from soteria.plaid.services.sync_service import sync_item_transactions
 from soteria.worker.celery_app import app
 
 
-@app.task(name="plaid.sync_plaid_item")
+@app.task(
+    name="plaid.sync_plaid_item",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def sync_plaid_item(item_id: str) -> None:
     plaid_item = get_plaid_item_by_item_id(item_id)
     if plaid_item is None:

@@ -1,9 +1,10 @@
 """Transaction sync service: given a Plaid Item, download all new transactions.
 
 Orchestrates the existing Plaid sync + persistence building blocks, then
-fans each newly-inserted transaction out to the enrichment pipeline. No
-scoring/analysis happens here — that's the enrichment task's job, running
-asynchronously.
+fans each newly-inserted transaction out to the enrichment pipeline and
+triggers subscription-stream discovery for the item. No scoring/analysis
+happens inline here — everything past persistence runs asynchronously as
+its own Celery task.
 """
 
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from soteria.plaid.transactions import (
     soft_delete_removed_transactions,
 )
 from soteria.plaid.transactions_sync import sync_transactions
+from soteria.worker.tasks.detect_subscriptions import detect_subscriptions_task
 from soteria.worker.tasks.process_transaction import process_transaction
 
 
@@ -38,6 +40,9 @@ def sync_item_transactions(plaid_item: PlaidItem) -> TransactionSyncResult:
 
     for transaction in added:
         process_transaction.delay(str(transaction.id))
+
+    if added:
+        detect_subscriptions_task.delay(plaid_item.plaid_item_id)
 
     return TransactionSyncResult(
         added=added,

@@ -64,6 +64,24 @@ def save_subscription(user_id: uuid.UUID, stream: TransactionStream) -> Subscrip
         return subscription
 
 
+def find_active_subscription(user_id: uuid.UUID, normalized_merchant: str) -> uuid.UUID | None:
+    """Cheap per-transaction lookup against already-detected subscriptions — no Plaid call.
+    Discovering *new* recurring streams still requires save_subscription() via the
+    Plaid recurring-transactions endpoint; this only links against what's already known.
+    """
+    with SessionLocal() as session:
+        subscription = (
+            session.query(Subscription)
+            .filter_by(
+                user_id=user_id,
+                normalized_name=normalized_merchant,
+                status=SubscriptionStatus.ACTIVE,
+            )
+            .one_or_none()
+        )
+        return subscription.id if subscription is not None else None
+
+
 def link_transactions_to_subscription(
     subscription_id: uuid.UUID, plaid_transaction_ids: list[str]
 ) -> int:

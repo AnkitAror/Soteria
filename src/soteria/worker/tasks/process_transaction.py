@@ -11,6 +11,7 @@ from soteria.analysis.models.scoring import TransactionFeatures
 from soteria.analysis.services.categorization import categorize_transaction
 from soteria.analysis.services.merchant_normalization import normalize_merchant
 from soteria.analysis.services.scoring import build_history_stats, compute_scores
+from soteria.analysis.subscriptions import find_active_subscription
 from soteria.analysis.transaction_analysis import save_analysis, save_scores
 from soteria.analysis.transaction_history import fetch_scoring_inputs
 from soteria.db.models.transactions import Transaction
@@ -18,7 +19,13 @@ from soteria.db.session import SessionLocal
 from soteria.worker.celery_app import app
 
 
-@app.task(name="analysis.process_transaction")
+@app.task(
+    name="analysis.process_transaction",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def process_transaction(transaction_id: str) -> None:
     txn_uuid = uuid.UUID(transaction_id)
 
@@ -30,6 +37,7 @@ def process_transaction(transaction_id: str) -> None:
 
         normalized_merchant = normalize_merchant(transaction.description)
         normalized_category = categorize_transaction(transaction.category, transaction.description)
+        subscription_id = find_active_subscription(transaction.user_id, normalized_merchant)
 
         current_features = TransactionFeatures(
             amount=transaction.amount,
@@ -46,6 +54,7 @@ def process_transaction(transaction_id: str) -> None:
         txn_uuid,
         normalized_merchant=normalized_merchant,
         normalized_category=normalized_category,
+        subscription_id=subscription_id,
     )
     save_scores(txn_uuid, scores)
 
