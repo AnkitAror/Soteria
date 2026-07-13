@@ -28,6 +28,7 @@ def test_category_spend_increase_fires_above_threshold() -> None:
     assert draft.confidence == Decimal("0.9167")
     assert draft.identity_key == "category_spend_increase:Food"
     assert draft.value_signature == "medium:1.2800"
+    assert draft.category == "Food"
     _assert_confidence_in_range(draft)
 
 
@@ -147,6 +148,24 @@ def test_new_subscription_detected_returns_none_after_window() -> None:
     assert draft is None
 
 
+def test_new_subscription_detected_defaults_category_to_none() -> None:
+    draft = rules.new_subscription_detected_rule(
+        uuid.uuid4(), "Streamflix", TODAY - timedelta(days=1), today=TODAY
+    )
+
+    assert draft is not None
+    assert draft.category is None
+
+
+def test_new_subscription_detected_carries_category_when_provided() -> None:
+    draft = rules.new_subscription_detected_rule(
+        uuid.uuid4(), "Streamflix", TODAY - timedelta(days=1), today=TODAY, category="Entertainment"
+    )
+
+    assert draft is not None
+    assert draft.category == "Entertainment"
+
+
 # --- subscription_price_increase_rule ---------------------------------------
 
 
@@ -160,6 +179,16 @@ def test_subscription_price_increase_fires_above_threshold() -> None:
     assert draft.severity == "medium"
     assert draft.identity_key == f"subscription_price_increase:{subscription_id}"
     assert draft.value_signature == "2.00"
+    assert draft.category is None
+
+
+def test_subscription_price_increase_carries_category_when_provided() -> None:
+    draft = rules.subscription_price_increase_rule(
+        uuid.uuid4(), "Streamflix", Decimal("15.99"), Decimal("2.00"), category="Entertainment"
+    )
+
+    assert draft is not None
+    assert draft.category == "Entertainment"
 
 
 def test_subscription_price_increase_severity_escalates_to_high() -> None:
@@ -225,6 +254,7 @@ def test_duplicate_subscriptions_fires_with_two_or_more() -> None:
 
     assert draft is not None
     assert draft.identity_key == "duplicate_subscriptions:Entertainment"
+    assert draft.category == "Entertainment"
 
 
 def test_duplicate_subscriptions_returns_none_with_one() -> None:
@@ -241,6 +271,7 @@ def test_spending_exceeds_income_fires_on_deficit() -> None:
 
     assert draft is not None
     assert draft.identity_key == "spending_exceeds_income:2026-07"
+    assert draft.category is None  # account/cash-flow-level, not one category
 
 
 def test_spending_exceeds_income_returns_none_when_within_income() -> None:
@@ -259,6 +290,7 @@ def test_low_balance_forecast_fires_within_threshold() -> None:
     assert draft is not None
     assert draft.identity_key == f"low_balance_forecast:{account_id}"
     assert draft.value_signature == "5"
+    assert draft.category is None
 
 
 def test_low_balance_forecast_returns_none_when_projection_beyond_threshold() -> None:
@@ -310,6 +342,7 @@ def test_largest_purchase_fires_above_baseline() -> None:
     assert draft is not None
     assert draft.identity_key == "largest_purchase_this_month:2026-07"
     assert draft.value_signature == str(transaction_id)
+    assert draft.category == "Shopping"
 
 
 def test_largest_purchase_returns_none_below_baseline() -> None:
@@ -336,6 +369,7 @@ def test_merchant_concentration_fires_above_threshold() -> None:
 
     assert draft is not None
     assert draft.identity_key == "merchant_concentration:Amazon"
+    assert draft.category is None  # overall concentration isn't about one category
 
 
 def test_merchant_concentration_returns_none_below_threshold() -> None:
@@ -348,6 +382,54 @@ def test_merchant_concentration_returns_none_below_month_floor() -> None:
     draft = rules.merchant_concentration_rule("Amazon", Decimal("30"), Decimal("50"))
 
     assert draft is None
+
+
+# --- category_merchant_concentration_rule -------------------------------------
+
+
+def test_category_merchant_concentration_fires_above_threshold() -> None:
+    draft = rules.category_merchant_concentration_rule(
+        "Food", "Cafe A", Decimal("290"), Decimal("400")
+    )
+
+    assert draft is not None
+    assert draft.type == "category_merchant_concentration"
+    assert draft.title == "Most of your Food spending went to Cafe A"
+    assert draft.description == "72% of your Food spending this month was at Cafe A."
+    assert draft.identity_key == "category_merchant_concentration:Food:Cafe A"
+    assert draft.category == "Food"
+
+
+def test_category_merchant_concentration_returns_none_below_threshold() -> None:
+    draft = rules.category_merchant_concentration_rule(
+        "Food", "Cafe A", Decimal("50"), Decimal("400")
+    )
+
+    assert draft is None
+
+
+def test_category_merchant_concentration_returns_none_below_category_noise_floor() -> None:
+    draft = rules.category_merchant_concentration_rule(
+        "Food", "Cafe A", Decimal("15"), Decimal("18")
+    )
+
+    assert draft is None
+
+
+def test_category_merchant_concentration_differs_from_overall_merchant_concentration() -> None:
+    # Same merchant, same raw dollar amount ($290) — but a much bigger share
+    # of the Food category (72%) than of total monthly spend (29%). The two
+    # rules must answer different questions, not just alias each other.
+    within_category = rules.category_merchant_concentration_rule(
+        "Food", "Cafe A", Decimal("290"), Decimal("400")
+    )
+    overall = rules.merchant_concentration_rule("Cafe A", Decimal("290"), Decimal("1000"))
+
+    assert within_category is not None
+    assert overall is not None
+    assert within_category.value_signature != overall.value_signature
+    assert within_category.category == "Food"
+    assert overall.category is None
 
 
 # --- spending_above_normal_rule -----------------------------------------------

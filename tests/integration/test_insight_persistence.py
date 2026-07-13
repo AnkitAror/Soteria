@@ -20,6 +20,7 @@ def _draft(
     *,
     severity: str = "medium",
     identity_key: str = "category_spend_increase:Food",
+    category: str | None = None,
 ) -> InsightDraft:
     return InsightDraft(
         type=identity_key.split(":")[0],
@@ -31,6 +32,7 @@ def _draft(
         value_signature=value_signature,
         expires_in_days=14,
         metadata={"category": "Food"},
+        category=category,
     )
 
 
@@ -92,6 +94,31 @@ def test_upsert_insight_ignores_dismissed_insight_and_inserts_fresh(
     second = upsert_insight(test_user_id, _draft("medium:1.28"))
 
     assert second.id != first.id
+
+
+def test_upsert_insight_persists_category_on_insert(test_user_id: uuid.UUID) -> None:
+    insight = upsert_insight(test_user_id, _draft("medium:1.28", category="Food"))
+
+    assert insight.category == "Food"
+
+    with SessionLocal() as session:
+        refreshed = session.get(Insight, insight.id)
+        assert refreshed is not None
+        assert refreshed.category == "Food"
+
+
+def test_upsert_insight_preserves_category_through_update_in_place(test_user_id: uuid.UUID) -> None:
+    first = upsert_insight(test_user_id, _draft("medium:1.28", category="Food"))
+    second = upsert_insight(test_user_id, _draft("medium:1.28", category="Food"))
+
+    assert second.id == first.id
+    assert second.category == "Food"
+
+
+def test_upsert_insight_defaults_category_to_none(test_user_id: uuid.UUID) -> None:
+    insight = upsert_insight(test_user_id, _draft("4", identity_key="low_balance_forecast:acct-1"))
+
+    assert insight.category is None
 
 
 def test_list_active_insights_ranks_by_severity_not_recency(test_user_id: uuid.UUID) -> None:

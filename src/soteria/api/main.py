@@ -99,6 +99,7 @@ class InsightSummary(BaseModel):
     description: str
     severity: str
     priority: int
+    category: str | None
     confidence: str | None
     created_at: str
     viewed_at: str | None
@@ -194,6 +195,7 @@ def _insight_summary(insight: Insight) -> InsightSummary:
         description=insight.description,
         severity=insight.severity,
         priority=severity_rank(insight.severity),
+        category=insight.category,
         confidence=str(insight.confidence) if insight.confidence is not None else None,
         created_at=insight.created_at.isoformat(),
         viewed_at=insight.viewed_at.isoformat() if insight.viewed_at else None,

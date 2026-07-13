@@ -24,6 +24,12 @@ class Insight(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
     severity: Mapped[str] = mapped_column(String, nullable=False)
+    # Which spending category this insight is about (e.g. "Food"), for
+    # grouping into category cards. NULL for account/cash-flow-level
+    # insights (low_balance_forecast, spending_exceeds_income, savings_trend,
+    # spending_above_normal, the overall merchant_concentration) that aren't
+    # about any one category.
+    category: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

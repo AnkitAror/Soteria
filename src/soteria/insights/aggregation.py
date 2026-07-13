@@ -106,6 +106,36 @@ def merchant_totals(session: Session, user_id: uuid.UUID, *, since: date) -> dic
     return dict(totals)
 
 
+def category_merchant_totals(
+    session: Session, user_id: uuid.UUID, *, since: date
+) -> dict[tuple[str, str], Decimal]:
+    """Keyed by (category, merchant) — spend within one category attributed
+    to one merchant. Distinct from merchant_totals(), which is a merchant's
+    share of *all* spend; this is what powers "y% of your Food spending was
+    at Cafe A" rather than "y% of your overall spending was at Cafe A"."""
+    rows = (
+        session.query(
+            TransactionAnalysis.normalized_category,
+            TransactionAnalysis.normalized_merchant,
+            Transaction.amount,
+        )
+        .join(Transaction, Transaction.id == TransactionAnalysis.transaction_id)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.removed_at.is_(None),
+            Transaction.amount > 0,
+            Transaction.transaction_date >= since,
+            TransactionAnalysis.normalized_category.is_not(None),
+            TransactionAnalysis.normalized_merchant.is_not(None),
+        )
+        .all()
+    )
+    totals: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal("0"))
+    for category, merchant, amount in rows:
+        totals[(category, merchant)] += amount
+    return dict(totals)
+
+
 def average_spend(
     session: Session,
     user_id: uuid.UUID,
@@ -312,6 +342,9 @@ def fetch_insight_inputs(
         monthly_category_totals=monthly_category_totals(session, user_id, today=today),
         average_spend_by_category=average_spend_by_category,
         merchant_totals_this_month=merchant_totals(session, user_id, since=month_start),
+        category_merchant_totals_this_month=category_merchant_totals(
+            session, user_id, since=month_start
+        ),
         weekly_spending=weekly_spending(session, user_id, today=today),
         largest_expenses_this_month=expenses,
         subscriptions=subscription_costs(session, user_id),

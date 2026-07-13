@@ -34,6 +34,7 @@ LOW_BALANCE_FORECAST_DEFAULT_THRESHOLD_DAYS = 14
 LARGEST_PURCHASE_MIN_RATIO = Decimal("1.5")
 MERCHANT_CONCENTRATION_THRESHOLD = Decimal("0.25")
 MERCHANT_CONCENTRATION_MONTH_FLOOR = Decimal("100")
+CATEGORY_MERCHANT_CONCENTRATION_THRESHOLD = Decimal("0.25")
 ANOMALY_CLUSTER_MIN_COUNT = 2
 
 
@@ -72,6 +73,7 @@ def category_spend_increase_rule(
         identity_key=f"category_spend_increase:{category}",
         value_signature=f"{severity}:{ratio}",
         expires_in_days=14,
+        category=category,
         metadata={
             "category": category,
             "current_month_total": str(current_month_total),
@@ -103,6 +105,7 @@ def category_spend_decrease_rule(
         identity_key=f"category_spend_decrease:{category}",
         value_signature=str(ratio),
         expires_in_days=14,
+        category=category,
         metadata={
             "category": category,
             "current_month_total": str(current_month_total),
@@ -139,6 +142,7 @@ def category_spending_trend_rule(
         identity_key=f"category_spending_trend:{category}",
         value_signature=direction,
         expires_in_days=30,
+        category=category,
         metadata={"category": category, "trailing_totals": [str(t) for t in trailing_totals]},
     )
 
@@ -147,7 +151,12 @@ def category_spending_trend_rule(
 
 
 def new_subscription_detected_rule(
-    subscription_id: uuid.UUID, merchant_name: str, created_at: date, *, today: date
+    subscription_id: uuid.UUID,
+    merchant_name: str,
+    created_at: date,
+    *,
+    today: date,
+    category: str | None = None,
 ) -> InsightDraft | None:
     if (today - created_at).days > NEW_SUBSCRIPTION_WINDOW_DAYS:
         return None
@@ -160,6 +169,7 @@ def new_subscription_detected_rule(
         identity_key=f"new_subscription:{subscription_id}",
         value_signature="detected",
         expires_in_days=14,
+        category=category,
         metadata={"subscription_id": str(subscription_id), "merchant_name": merchant_name},
     )
 
@@ -169,6 +179,8 @@ def subscription_price_increase_rule(
     merchant_name: str,
     previous_cost: Decimal,
     change_amount: Decimal,
+    *,
+    category: str | None = None,
 ) -> InsightDraft | None:
     if change_amount <= 0:
         return None
@@ -189,6 +201,7 @@ def subscription_price_increase_rule(
         identity_key=f"subscription_price_increase:{subscription_id}",
         value_signature=str(change_amount),
         expires_in_days=30,
+        category=category,
         metadata={
             "subscription_id": str(subscription_id),
             "merchant_name": merchant_name,
@@ -217,6 +230,7 @@ def duplicate_subscriptions_rule(
         identity_key=f"duplicate_subscriptions:{category}",
         value_signature=str(ids),
         expires_in_days=30,
+        category=category,
         metadata={"category": category, "subscription_ids": ids, "merchant_names": names},
     )
 
@@ -325,6 +339,7 @@ def largest_purchase_this_month_rule(
         identity_key=f"largest_purchase_this_month:{year}-{month:02d}",
         value_signature=str(transaction_id),
         expires_in_days=30,
+        category=category,
         metadata={
             "transaction_id": str(transaction_id),
             "merchant": merchant,
@@ -355,6 +370,43 @@ def merchant_concentration_rule(
             "merchant": merchant,
             "merchant_total": str(merchant_total),
             "month_total": str(month_total),
+            "share": str(share),
+        },
+    )
+
+
+def category_merchant_concentration_rule(
+    category: str,
+    merchant: str,
+    merchant_total_in_category: Decimal,
+    category_total: Decimal,
+) -> InsightDraft | None:
+    """Distinct from merchant_concentration_rule: this is a merchant's share
+    of one category's spend ("72% of your Food spending was at Cafe A"), not
+    share of total monthly spend. Reuses CATEGORY_NOISE_FLOOR as the floor
+    since a category slice is naturally smaller than total monthly spend."""
+    if category_total < CATEGORY_NOISE_FLOOR:
+        return None
+    share = (merchant_total_in_category / category_total).quantize(QUANT)
+    if share < CATEGORY_MERCHANT_CONCENTRATION_THRESHOLD:
+        return None
+    return InsightDraft(
+        type="category_merchant_concentration",
+        title=f"Most of your {category} spending went to {merchant}",
+        description=(
+            f"{share:.0%} of your {category} spending this month was at {merchant}."
+        ),
+        severity="low",
+        confidence=Decimal("0.8000"),
+        identity_key=f"category_merchant_concentration:{category}:{merchant}",
+        value_signature=str(share),
+        expires_in_days=14,
+        category=category,
+        metadata={
+            "category": category,
+            "merchant": merchant,
+            "merchant_total": str(merchant_total_in_category),
+            "category_total": str(category_total),
             "share": str(share),
         },
     )

@@ -77,6 +77,7 @@ class InsightInputs:
     monthly_category_totals: dict[tuple[int, int, str], CategoryMonthStat]
     average_spend_by_category: dict[str, Decimal]
     merchant_totals_this_month: dict[str, Decimal]
+    category_merchant_totals_this_month: dict[tuple[str, str], Decimal]
     weekly_spending: dict[date, Decimal]
     largest_expenses_this_month: list[LargestExpenseRow]
     subscriptions: list[SubscriptionSnapshot]
@@ -106,3 +107,9 @@ class InsightDraft:
     value_signature: str
     expires_in_days: int
     metadata: dict[str, Any]
+    # Which spending category this insight is about (e.g. "Food"), for the
+    # frontend to group into category cards. None for account/cash-flow-level
+    # insights that aren't about any one category. Must stay last: it's the
+    # only field with a default, and dataclass fields without defaults can't
+    # follow ones that have them.
+    category: str | None = None

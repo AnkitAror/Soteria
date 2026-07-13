@@ -55,6 +55,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
                 description=draft.description,
                 severity=draft.severity,
                 confidence=draft.confidence,
+                category=draft.category,
                 metadata_json=metadata,
                 expires_at=now + timedelta(days=draft.expires_in_days),
             )
@@ -73,6 +74,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
             existing.description = draft.description
             existing.severity = draft.severity
             existing.confidence = draft.confidence
+            existing.category = draft.category
             existing.metadata_json = metadata
             existing.expires_at = now + timedelta(days=draft.expires_in_days)
             session.commit()
@@ -91,6 +93,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
             description=draft.description,
             severity=draft.severity,
             confidence=draft.confidence,
+            category=draft.category,
             metadata_json=metadata,
             expires_at=now + timedelta(days=draft.expires_in_days),
         )

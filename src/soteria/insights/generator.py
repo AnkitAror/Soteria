@@ -25,6 +25,7 @@ def generate_insights(user_id: uuid.UUID) -> list[Insight]:
 
     drafts: list[InsightDraft] = []
     drafts.extend(_spending_drafts(inputs))
+    drafts.extend(_category_merchant_drafts(inputs))
     drafts.extend(_subscription_drafts(inputs))
     drafts.extend(_cash_flow_drafts(inputs))
     drafts.extend(_behavioral_drafts(inputs))
@@ -79,6 +80,21 @@ def _spending_drafts(inputs: InsightInputs) -> list[InsightDraft]:
     return drafts
 
 
+def _category_merchant_drafts(inputs: InsightInputs) -> list[InsightDraft]:
+    drafts: list[InsightDraft] = []
+    current_month = (inputs.today.year, inputs.today.month)
+    for (category, merchant), merchant_total in inputs.category_merchant_totals_this_month.items():
+        category_stat = inputs.monthly_category_totals.get((*current_month, category))
+        if category_stat is None:
+            continue
+        concentration = rules.category_merchant_concentration_rule(
+            category, merchant, merchant_total, category_stat.total
+        )
+        if concentration:
+            drafts.append(concentration)
+    return drafts
+
+
 def _subscription_drafts(inputs: InsightInputs) -> list[InsightDraft]:
     drafts: list[InsightDraft] = []
     by_category: dict[str, list] = {}
@@ -89,6 +105,7 @@ def _subscription_drafts(inputs: InsightInputs) -> list[InsightDraft]:
             subscription.merchant_name,
             subscription.created_at,
             today=inputs.today,
+            category=subscription.category,
         )
         if new_subscription:
             drafts.append(new_subscription)
@@ -100,6 +117,7 @@ def _subscription_drafts(inputs: InsightInputs) -> list[InsightDraft]:
                 subscription.merchant_name,
                 previous_cost,
                 subscription.last_price_change_amount,
+                category=subscription.category,
             )
             if increase:
                 drafts.append(increase)
