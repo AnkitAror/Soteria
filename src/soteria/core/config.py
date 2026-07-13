@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     encryption_key: str = ""
 
+    insights_generation_interval_minutes: int = 360
+
 
 @lru_cache
 def get_settings() -> Settings:

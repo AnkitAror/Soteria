@@ -27,6 +27,16 @@ def _get_or_create_dev_user(session: Session) -> User:
     return user
 
 
+def get_or_create_dev_user_id() -> uuid.UUID:
+    """Public entry point for callers outside plaid/ that just need the dev
+    user's id (e.g. the /api/insights route) — everything else in this file
+    is scoped to Plaid item persistence."""
+    with SessionLocal() as session:
+        user = _get_or_create_dev_user(session)
+        session.commit()
+        return user.id
+
+
 def save_plaid_item(
     *,
     item_id: str,

@@ -12,11 +12,15 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from soteria.core.config import get_settings
+from soteria.db.models.insights import Insight
 from soteria.db.models.transactions import Transaction
+from soteria.insights.models.aggregates import severity_rank
+from soteria.insights.persistence import list_active_insights_for_user
 from soteria.plaid.accounts import fetch_accounts
 from soteria.plaid.bank_accounts import save_bank_accounts
 from soteria.plaid.items import (
     get_decrypted_access_token,
+    get_or_create_dev_user_id,
     get_plaid_item,
     get_plaid_item_by_item_id,
     save_plaid_item,
@@ -86,6 +90,23 @@ class SyncTransactionsResponse(BaseModel):
     modified: list[TransactionSummary]
     removed_count: int
     next_cursor: str
+
+
+class InsightSummary(BaseModel):
+    id: str
+    type: str
+    title: str
+    description: str
+    severity: str
+    priority: int
+    confidence: str | None
+    created_at: str
+    viewed_at: str | None
+    dismissed_at: str | None
+
+
+class InsightsResponse(BaseModel):
+    insights: list[InsightSummary]
 
 
 class PlaidWebhookPayload(BaseModel):
@@ -163,6 +184,28 @@ def _transaction_summary(transaction: Transaction) -> TransactionSummary:
         transaction_date=transaction.transaction_date.isoformat(),
         pending=transaction.pending,
     )
+
+
+def _insight_summary(insight: Insight) -> InsightSummary:
+    return InsightSummary(
+        id=str(insight.id),
+        type=insight.type,
+        title=insight.title,
+        description=insight.description,
+        severity=insight.severity,
+        priority=severity_rank(insight.severity),
+        confidence=str(insight.confidence) if insight.confidence is not None else None,
+        created_at=insight.created_at.isoformat(),
+        viewed_at=insight.viewed_at.isoformat() if insight.viewed_at else None,
+        dismissed_at=insight.dismissed_at.isoformat() if insight.dismissed_at else None,
+    )
+
+
+@app.get("/api/insights")
+def list_insights() -> InsightsResponse:
+    user_id = get_or_create_dev_user_id()
+    insights = list_active_insights_for_user(user_id)
+    return InsightsResponse(insights=[_insight_summary(i) for i in insights])
 
 
 @app.post("/api/plaid/transactions/sync")

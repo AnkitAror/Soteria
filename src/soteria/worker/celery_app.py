@@ -1,5 +1,7 @@
 """Celery application instance."""
 
+from datetime import timedelta
+
 from celery import Celery
 
 from soteria.core.config import get_settings
@@ -12,7 +14,9 @@ app = Celery(
     backend=settings.celery_result_backend,
     include=[
         "soteria.worker.tasks.detect_subscriptions",
+        "soteria.worker.tasks.generate_insights",
         "soteria.worker.tasks.health",
+        "soteria.worker.tasks.insights_fanout",
         "soteria.worker.tasks.plaid_sync",
         "soteria.worker.tasks.process_transaction",
     ],
@@ -33,4 +37,13 @@ app.conf.update(
     # Default retry policy any task can rely on via self.retry() without
     # declaring its own max_retries/default_retry_delay.
     task_annotations={"*": {"max_retries": 3, "default_retry_delay": 30}},
+    # Periodic, whole-user insight generation — requires `celery beat` to be
+    # running (`make beat`); see worker/tasks/insights_fanout.py for why this
+    # is a periodic fan-out rather than chained off the sync flow.
+    beat_schedule={
+        "insights-fan-out": {
+            "task": "insights.fan_out_generation",
+            "schedule": timedelta(minutes=settings.insights_generation_interval_minutes),
+        },
+    },
 )
