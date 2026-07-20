@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     plaid_secret: str = ""
     plaid_env: str = "sandbox"
     plaid_webhook_verification_enabled: bool = False
+    # Public URL Plaid should POST webhooks to, e.g. an ngrok tunnel ending in
+    # /plaid/webhook. Left blank, Link tokens are created with no webhook
+    # destination at all (Plaid has nowhere to send events).
+    plaid_webhook_url: str = ""
 
     encryption_key: str = ""
 

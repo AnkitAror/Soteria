@@ -246,16 +246,25 @@ async def plaid_webhook(request: Request) -> WebhookAckResponse:
             print(f"Unknown item_id={payload.item_id}; dropping")
             return WebhookAckResponse()
 
-        if payload.webhook_type == "ITEM" and payload.webhook_code in ITEM_LOGIN_REQUIRED_CODES:
-            if not claim_webhook_event(payload.item_id, payload.webhook_code):
-                print(
-                    f"Duplicate delivery: webhook_code={payload.webhook_code} "
-                    f"item {payload.item_id}"
-                )
+        error_code = (payload.error or {}).get("error_code")
+        needs_relink = payload.webhook_type == "ITEM" and (
+            payload.webhook_code in ITEM_LOGIN_REQUIRED_CODES
+            or error_code in ITEM_LOGIN_REQUIRED_CODES
+        )
+        if needs_relink:
+            # Plaid delivers this as a generic ITEM/ERROR webhook with the real
+            # signal nested in `error.error_code` (e.g. "ITEM_LOGIN_REQUIRED"),
+            # not as a dedicated top-level webhook_code — confirmed by firing a
+            # real sandbox webhook. Dedup on the combination so two distinct
+            # ERROR causes for the same item within the TTL window don't collide.
+            dedup_code = (
+                f"{payload.webhook_code}:{error_code}" if error_code else payload.webhook_code
+            )
+            if not claim_webhook_event(payload.item_id, dedup_code):
+                print(f"Duplicate delivery: webhook_code={dedup_code} item {payload.item_id}")
                 return WebhookAckResponse()
-            error_code = (payload.error or {}).get("error_code")
             mark_item_login_required(payload.item_id, error_code)
-            print(f"{payload.webhook_code} -> login_required for item {payload.item_id}")
+            print(f"{dedup_code} -> login_required for item {payload.item_id}")
             return WebhookAckResponse()
 
         sync_event = resolve_sync_event(payload.webhook_code)

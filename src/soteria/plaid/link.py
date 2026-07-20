@@ -12,6 +12,7 @@ from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.products import Products
 
+from soteria.core.config import get_settings
 from soteria.plaid.client import plaid_client
 
 CLIENT_NAME = "Soteria (Sandbox)"
@@ -22,6 +23,11 @@ def create_link_token(user_id: uuid.UUID, access_token: str | None = None) -> st
     existing Item's access_token opens Link in "update mode" for relinking
     expired credentials — Plaid requires `products` to be omitted in that case.
     """
+    extra_kwargs = {}
+    webhook_url = get_settings().plaid_webhook_url
+    if webhook_url:
+        extra_kwargs["webhook"] = webhook_url
+
     if access_token is not None:
         request = LinkTokenCreateRequest(
             access_token=access_token,
@@ -29,6 +35,7 @@ def create_link_token(user_id: uuid.UUID, access_token: str | None = None) -> st
             country_codes=[CountryCode("US")],
             language="en",
             user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+            **extra_kwargs,
         )
     else:
         request = LinkTokenCreateRequest(
@@ -37,6 +44,7 @@ def create_link_token(user_id: uuid.UUID, access_token: str | None = None) -> st
             country_codes=[CountryCode("US")],
             language="en",
             user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+            **extra_kwargs,
         )
     response = plaid_client.link_token_create(request)
     return str(response.link_token)
