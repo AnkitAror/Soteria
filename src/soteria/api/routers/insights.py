@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from soteria.core.auth import get_current_user_id
 from soteria.db.models.insights import Insight
+from soteria.insights.generator import generate_insights
 from soteria.insights.models.aggregates import severity_rank
 from soteria.insights.persistence import dismiss_insight, list_active_insights_for_user
 
@@ -49,6 +50,13 @@ def _insight_summary(insight: Insight) -> InsightSummary:
 
 @router.get("/insights")
 def list_insights(user_id: uuid.UUID = Depends(get_current_user_id)) -> InsightsResponse:
+    insights = list_active_insights_for_user(user_id)
+    return InsightsResponse(insights=[_insight_summary(i) for i in insights])
+
+
+@router.post("/insights/generate")
+def generate(user_id: uuid.UUID = Depends(get_current_user_id)) -> InsightsResponse:
+    generate_insights(user_id)
     insights = list_active_insights_for_user(user_id)
     return InsightsResponse(insights=[_insight_summary(i) for i in insights])
 
