@@ -103,6 +103,20 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
         return insight
 
 
+def dismiss_insight(user_id: uuid.UUID, insight_id: uuid.UUID) -> Insight | None:
+    """Soft-dismiss: sets dismissed_at so the row drops out of
+    list_active_insights_for_user without being deleted. Returns None if no
+    such insight exists for this user (caller should treat that as 404)."""
+    with SessionLocal() as session:
+        insight = session.get(Insight, insight_id)
+        if insight is None or insight.user_id != user_id:
+            return None
+        insight.dismissed_at = datetime.now(UTC)
+        session.commit()
+        session.refresh(insight)
+        return insight
+
+
 def list_active_insights_for_user(user_id: uuid.UUID) -> list[Insight]:
     """Not every insight deserves equal attention — a low balance forecast
     should surface above a 3% coffee spending bump. Ranked by severity

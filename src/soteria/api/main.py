@@ -1,28 +1,33 @@
-"""Minimal FastAPI app: Plaid Link sandbox smoke test only.
-
-No auth system — see soteria.plaid for the underlying Plaid calls and
-persistence helpers.
+"""Soteria API: Supabase-authenticated endpoints plus the Plaid Link sandbox
+smoke test — see soteria.plaid for the underlying Plaid calls and
+persistence helpers, soteria.core.auth for Supabase JWT verification.
 """
 
 import traceback
+import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from soteria.api.routers.dashboard import router as dashboard_router
+from soteria.api.routers.insights import router as insights_router
+from soteria.api.routers.plaid_items import router as plaid_items_router
+from soteria.api.routers.subscriptions import router as subscriptions_router
+from soteria.api.routers.transactions import router as transactions_router
+from soteria.core.auth import get_current_user, get_current_user_id
 from soteria.core.config import get_settings
-from soteria.db.models.insights import Insight
 from soteria.db.models.transactions import Transaction
-from soteria.insights.models.aggregates import severity_rank
-from soteria.insights.persistence import list_active_insights_for_user
+from soteria.db.models.users import User
 from soteria.plaid.accounts import fetch_accounts
 from soteria.plaid.bank_accounts import save_bank_accounts
 from soteria.plaid.items import (
     get_decrypted_access_token,
-    get_or_create_dev_user_id,
     get_plaid_item,
     get_plaid_item_by_item_id,
+    mark_item_login_required,
     save_plaid_item,
 )
 from soteria.plaid.link import create_link_token, exchange_public_token
@@ -32,9 +37,29 @@ from soteria.plaid.webhook_events import resolve_sync_event
 from soteria.plaid.webhook_verification import is_webhook_authentic
 from soteria.worker.tasks.plaid_sync import sync_plaid_item
 
-app = FastAPI(title="Soteria Plaid Sandbox Test")
+app = FastAPI(title="Soteria API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(dashboard_router)
+app.include_router(transactions_router)
+app.include_router(insights_router)
+app.include_router(subscriptions_router)
+app.include_router(plaid_items_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None
 
 
 class LinkTokenResponse(BaseModel):
@@ -92,24 +117,6 @@ class SyncTransactionsResponse(BaseModel):
     next_cursor: str
 
 
-class InsightSummary(BaseModel):
-    id: str
-    type: str
-    title: str
-    description: str
-    severity: str
-    priority: int
-    category: str | None
-    confidence: str | None
-    created_at: str
-    viewed_at: str | None
-    dismissed_at: str | None
-
-
-class InsightsResponse(BaseModel):
-    insights: list[InsightSummary]
-
-
 class PlaidWebhookPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -117,6 +124,10 @@ class PlaidWebhookPayload(BaseModel):
     webhook_code: str
     item_id: str
     new_transactions: int | None = None
+    error: dict | None = None
+
+
+ITEM_LOGIN_REQUIRED_CODES = {"ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT"}
 
 
 class WebhookAckResponse(BaseModel):
@@ -128,15 +139,23 @@ def index() -> FileResponse:
     return FileResponse(_STATIC_DIR / "index.html")
 
 
+@app.get("/api/me")
+def me(user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse(id=str(user.id), email=user.email, name=user.name)
+
+
 @app.post("/api/plaid/link-token")
-def link_token() -> LinkTokenResponse:
-    return LinkTokenResponse(link_token=create_link_token())
+def link_token(user_id: uuid.UUID = Depends(get_current_user_id)) -> LinkTokenResponse:
+    return LinkTokenResponse(link_token=create_link_token(user_id))
 
 
 @app.post("/api/plaid/exchange")
-def exchange(payload: ExchangeRequest) -> ExchangeResponse:
+def exchange(
+    payload: ExchangeRequest, user_id: uuid.UUID = Depends(get_current_user_id)
+) -> ExchangeResponse:
     access_token, item_id = exchange_public_token(payload.public_token)
     plaid_item = save_plaid_item(
+        user_id=user_id,
         item_id=item_id,
         access_token=access_token,
         institution_id=payload.institution_id,
@@ -187,29 +206,6 @@ def _transaction_summary(transaction: Transaction) -> TransactionSummary:
     )
 
 
-def _insight_summary(insight: Insight) -> InsightSummary:
-    return InsightSummary(
-        id=str(insight.id),
-        type=insight.type,
-        title=insight.title,
-        description=insight.description,
-        severity=insight.severity,
-        priority=severity_rank(insight.severity),
-        category=insight.category,
-        confidence=str(insight.confidence) if insight.confidence is not None else None,
-        created_at=insight.created_at.isoformat(),
-        viewed_at=insight.viewed_at.isoformat() if insight.viewed_at else None,
-        dismissed_at=insight.dismissed_at.isoformat() if insight.dismissed_at else None,
-    )
-
-
-@app.get("/api/insights")
-def list_insights() -> InsightsResponse:
-    user_id = get_or_create_dev_user_id()
-    insights = list_active_insights_for_user(user_id)
-    return InsightsResponse(insights=[_insight_summary(i) for i in insights])
-
-
 @app.post("/api/plaid/transactions/sync")
 def transactions_sync(payload: SyncTransactionsRequest) -> SyncTransactionsResponse:
     plaid_item = get_plaid_item(payload.plaid_item_id)
@@ -248,6 +244,18 @@ async def plaid_webhook(request: Request) -> WebhookAckResponse:
         plaid_item = get_plaid_item_by_item_id(payload.item_id)
         if plaid_item is None:
             print(f"Unknown item_id={payload.item_id}; dropping")
+            return WebhookAckResponse()
+
+        if payload.webhook_type == "ITEM" and payload.webhook_code in ITEM_LOGIN_REQUIRED_CODES:
+            if not claim_webhook_event(payload.item_id, payload.webhook_code):
+                print(
+                    f"Duplicate delivery: webhook_code={payload.webhook_code} "
+                    f"item {payload.item_id}"
+                )
+                return WebhookAckResponse()
+            error_code = (payload.error or {}).get("error_code")
+            mark_item_login_required(payload.item_id, error_code)
+            print(f"{payload.webhook_code} -> login_required for item {payload.item_id}")
             return WebhookAckResponse()
 
         sync_event = resolve_sync_event(payload.webhook_code)

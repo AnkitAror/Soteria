@@ -26,6 +26,10 @@ class Settings(BaseSettings):
 
     insights_generation_interval_minutes: int = 360
 
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -4,6 +4,8 @@ No DB writes here — see the PlaidItem model for the persistence layer,
 added in a later pass.
 """
 
+import uuid
+
 from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
@@ -13,18 +15,29 @@ from plaid.model.products import Products
 from soteria.plaid.client import plaid_client
 
 CLIENT_NAME = "Soteria (Sandbox)"
-# No real user/auth system yet; a fixed id is sufficient to exercise Link end-to-end.
-DUMMY_CLIENT_USER_ID = "soteria-sandbox-dev-user"
 
 
-def create_link_token() -> str:
-    request = LinkTokenCreateRequest(
-        products=[Products("transactions")],
-        client_name=CLIENT_NAME,
-        country_codes=[CountryCode("US")],
-        language="en",
-        user=LinkTokenCreateRequestUser(client_user_id=DUMMY_CLIENT_USER_ID),
-    )
+def create_link_token(user_id: uuid.UUID, access_token: str | None = None) -> str:
+    """access_token=None creates a link_token for a brand-new Item. Passing an
+    existing Item's access_token opens Link in "update mode" for relinking
+    expired credentials — Plaid requires `products` to be omitted in that case.
+    """
+    if access_token is not None:
+        request = LinkTokenCreateRequest(
+            access_token=access_token,
+            client_name=CLIENT_NAME,
+            country_codes=[CountryCode("US")],
+            language="en",
+            user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+        )
+    else:
+        request = LinkTokenCreateRequest(
+            products=[Products("transactions")],
+            client_name=CLIENT_NAME,
+            country_codes=[CountryCode("US")],
+            language="en",
+            user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+        )
     response = plaid_client.link_token_create(request)
     return str(response.link_token)
 
