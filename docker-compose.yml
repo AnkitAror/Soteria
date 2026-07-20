@@ -28,7 +28,13 @@ services:
 
   worker:
     build: .
-    command: uv run celery -A soteria.worker.celery_app worker --loglevel=info
+    # Concurrency defaults to CPU count; each forked child that handles a
+    # task keeps its DB connection open afterward (SQLAlchemy pools reuse,
+    # don't close). Supabase's session-mode pooler caps at 15 total
+    # connections across the whole app (api + worker children + beat), so
+    # concurrency has to stay well under that or a handful of concurrent
+    # tasks exhausts it — confirmed live.
+    command: uv run celery -A soteria.worker.celery_app worker --loglevel=info --concurrency=4
     env_file:
       - .env
     environment:

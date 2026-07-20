@@ -27,7 +27,9 @@ down:
 	docker compose down
 
 worker:
-	uv run celery -A soteria.worker.celery_app worker --loglevel=info
+	# --concurrency capped well under Supabase's 15-connection session-pooler
+	# limit — see the comment on the worker service in docker-compose.yml.
+	uv run celery -A soteria.worker.celery_app worker --loglevel=info --concurrency=4
 
 beat:
 	uv run celery -A soteria.worker.celery_app beat --loglevel=info
