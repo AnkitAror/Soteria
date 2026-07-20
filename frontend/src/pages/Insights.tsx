@@ -20,6 +20,19 @@ export function Insights() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dismissingId, setDismissingId] = useState<string | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+  const toggleSection = (section: string) => {
+    setExpandedSections((current) => {
+      const next = new Set(current)
+      if (next.has(section)) {
+        next.delete(section)
+      } else {
+        next.add(section)
+      }
+      return next
+    })
+  }
 
   const loadInsights = useCallback(async () => {
     setLoading(true)
@@ -87,51 +100,82 @@ export function Insights() {
           <p className="text-sm text-gray-500 dark:text-gray-400">No insights right now.</p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {groupInsightsBySection(insights).map(([section, sectionInsights]) => (
-            <section key={section}>
-              <h2 className="mb-3 text-sm font-medium text-gray-500 dark:text-gray-400">
-                {section}
-              </h2>
-              <div className="space-y-3">
-                {sectionInsights.map((insight) => (
-                  <div
-                    key={insight.id}
-                    className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${severityStyle(insight.severity)}`}
-                        >
-                          {insight.severity}
-                        </span>
-                        {insight.category && (
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                            {insight.category}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        disabled={dismissingId === insight.id}
-                        onClick={() => void handleDismiss(insight.id)}
-                        className="text-xs font-medium text-gray-400 hover:text-gray-700 disabled:opacity-40 dark:hover:text-gray-200"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                    <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-50">
-                      {insight.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                      {insight.description}
-                    </p>
+        <div className="space-y-3">
+          {groupInsightsBySection(insights).map(([section, sectionInsights]) => {
+            const expanded = expandedSections.has(section)
+            const topSeverity = sectionInsights[0].severity
+            return (
+              <div
+                key={section}
+                className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section)}
+                  className="flex w-full items-center justify-between gap-4 p-5 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${severityStyle(topSeverity)}`}
+                    >
+                      {topSeverity}
+                    </span>
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+                      {section}
+                    </h2>
+                    <span className="text-xs text-gray-400">
+                      {sectionInsights.length} insight{sectionInsights.length === 1 ? '' : 's'}
+                    </span>
                   </div>
-                ))}
+                  <span
+                    className={`text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                  >
+                    ▾
+                  </span>
+                </button>
+
+                {expanded && (
+                  <div className="space-y-3 border-t border-gray-100 p-5 dark:border-gray-800">
+                    {sectionInsights.map((insight) => (
+                      <div
+                        key={insight.id}
+                        className="rounded-xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-800/40"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${severityStyle(insight.severity)}`}
+                            >
+                              {insight.severity}
+                            </span>
+                            {insight.category && (
+                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                {insight.category}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={dismissingId === insight.id}
+                            onClick={() => void handleDismiss(insight.id)}
+                            className="text-xs font-medium text-gray-400 hover:text-gray-700 disabled:opacity-40 dark:hover:text-gray-200"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                        <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-50">
+                          {insight.title}
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                          {insight.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
