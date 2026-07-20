@@ -3,7 +3,9 @@
 The frontend authenticates directly against Supabase Auth (email/password,
 OAuth, etc.) and sends the resulting access token as a Bearer header on
 every request to this API — we never see credentials, only verify the
-token's signature against the project's JWT secret and trust its claims.
+token's signature and trust its claims. Verification is against the
+project's public JWKS (asymmetric signing keys), not a shared secret:
+newer Supabase projects don't expose a plain HS256 secret at all.
 
 `users.id` is set equal to the Supabase Auth user's `sub` claim, so no
 separate id-mapping table is needed. The first request from a new Supabase
@@ -11,11 +13,13 @@ user provisions their `users` row.
 """
 
 import uuid
+from functools import lru_cache
 from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 from sqlalchemy.orm import Session
 
 from soteria.core.config import get_settings
@@ -25,15 +29,22 @@ from soteria.db.session import SessionLocal
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+@lru_cache
+def _jwks_client() -> PyJWKClient:
+    jwks_url = f"{get_settings().supabase_url}/auth/v1/.well-known/jwks.json"
+    return PyJWKClient(jwks_url, cache_keys=True)
+
+
 def _decode_supabase_jwt(token: str) -> dict[str, Any]:
     try:
+        signing_key = _jwks_client().get_signing_key_from_jwt(token)
         return jwt.decode(
             token,
-            get_settings().supabase_jwt_secret,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256", "RS256"],
             audience="authenticated",
         )
-    except jwt.InvalidTokenError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
         ) from exc
