@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
+import { groupInsightsBySection } from '../lib/insightSections'
 import type { InsightsResponse, InsightSummary } from '../lib/types'
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -86,41 +87,50 @@ export function Insights() {
           <p className="text-sm text-gray-500 dark:text-gray-400">No insights right now.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {insights.map((insight) => (
-            <div
-              key={insight.id}
-              className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${severityStyle(insight.severity)}`}
+        <div className="space-y-8">
+          {groupInsightsBySection(insights).map(([section, sectionInsights]) => (
+            <section key={section}>
+              <h2 className="mb-3 text-sm font-medium text-gray-500 dark:text-gray-400">
+                {section}
+              </h2>
+              <div className="space-y-3">
+                {sectionInsights.map((insight) => (
+                  <div
+                    key={insight.id}
+                    className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"
                   >
-                    {insight.severity}
-                  </span>
-                  {insight.category && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                      {insight.category}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={dismissingId === insight.id}
-                  onClick={() => void handleDismiss(insight.id)}
-                  className="text-xs font-medium text-gray-400 hover:text-gray-700 disabled:opacity-40 dark:hover:text-gray-200"
-                >
-                  Dismiss
-                </button>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${severityStyle(insight.severity)}`}
+                        >
+                          {insight.severity}
+                        </span>
+                        {insight.category && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {insight.category}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={dismissingId === insight.id}
+                        onClick={() => void handleDismiss(insight.id)}
+                        className="text-xs font-medium text-gray-400 hover:text-gray-700 disabled:opacity-40 dark:hover:text-gray-200"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-50">
+                      {insight.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                      {insight.description}
+                    </p>
+                  </div>
+                ))}
               </div>
-              <h3 className="mt-3 text-sm font-semibold text-gray-900 dark:text-gray-50">
-                {insight.title}
-              </h3>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                {insight.description}
-              </p>
-            </div>
+            </section>
           ))}
         </div>
       )}
