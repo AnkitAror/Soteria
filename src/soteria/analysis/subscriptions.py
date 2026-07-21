@@ -9,6 +9,7 @@ import uuid
 from decimal import Decimal
 
 from plaid.model.transaction_stream import TransactionStream
+from sqlalchemy.orm import Session
 
 from soteria.analysis.services.merchant_normalization import normalize_merchant
 from soteria.analysis.transaction_analysis import save_analysis
@@ -64,22 +65,25 @@ def save_subscription(user_id: uuid.UUID, stream: TransactionStream) -> Subscrip
         return subscription
 
 
-def find_active_subscription(user_id: uuid.UUID, normalized_merchant: str) -> uuid.UUID | None:
+def find_active_subscription(
+    session: Session, user_id: uuid.UUID, normalized_merchant: str
+) -> uuid.UUID | None:
     """Cheap per-transaction lookup against already-detected subscriptions — no Plaid call.
     Discovering *new* recurring streams still requires save_subscription() via the
     Plaid recurring-transactions endpoint; this only links against what's already known.
+    Takes the caller's session (see transaction_analysis.py's save_analysis/save_scores)
+    since it's called alongside them on the single-transaction critical path.
     """
-    with SessionLocal() as session:
-        subscription = (
-            session.query(Subscription)
-            .filter_by(
-                user_id=user_id,
-                normalized_name=normalized_merchant,
-                status=SubscriptionStatus.ACTIVE,
-            )
-            .one_or_none()
+    subscription = (
+        session.query(Subscription)
+        .filter_by(
+            user_id=user_id,
+            normalized_name=normalized_merchant,
+            status=SubscriptionStatus.ACTIVE,
         )
-        return subscription.id if subscription is not None else None
+        .one_or_none()
+    )
+    return subscription.id if subscription is not None else None
 
 
 def link_transactions_to_subscription(
@@ -92,7 +96,7 @@ def link_transactions_to_subscription(
             .filter(Transaction.plaid_transaction_id.in_(plaid_transaction_ids))
             .all()
         ]
-
-    for transaction_id in transaction_ids:
-        save_analysis(transaction_id, subscription_id=subscription_id)
+        for transaction_id in transaction_ids:
+            save_analysis(session, transaction_id, subscription_id=subscription_id)
+        session.commit()
     return len(transaction_ids)

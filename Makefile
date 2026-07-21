@@ -27,8 +27,8 @@ down:
 	docker compose down
 
 worker:
-	# --concurrency capped well under Supabase's 15-connection session-pooler
-	# limit — see the comment on the worker service in docker-compose.yml.
+	# --concurrency kept conservative even on the transaction-mode pooler
+	# (port 6543) — see the comment on the worker service in docker-compose.yml.
 	uv run celery -A soteria.worker.celery_app worker --loglevel=info --concurrency=4
 
 beat:

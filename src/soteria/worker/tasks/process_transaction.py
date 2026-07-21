@@ -29,6 +29,10 @@ from soteria.worker.celery_app import app
 def process_transaction(transaction_id: str) -> None:
     txn_uuid = uuid.UUID(transaction_id)
 
+    # One session for the whole task rather than one per DB call (fetch,
+    # subscription lookup, history, save_analysis, save_scores each used to
+    # open their own) -- fewer connection-pool checkouts per transaction,
+    # which is both faster and gentler on Supabase's pooler under load.
     with SessionLocal() as session:
         transaction = session.get(Transaction, txn_uuid)
         if transaction is None:
@@ -37,7 +41,9 @@ def process_transaction(transaction_id: str) -> None:
 
         normalized_merchant = normalize_merchant(transaction.description)
         normalized_category = categorize_transaction(transaction.category, transaction.description)
-        subscription_id = find_active_subscription(transaction.user_id, normalized_merchant)
+        subscription_id = find_active_subscription(
+            session, transaction.user_id, normalized_merchant
+        )
 
         current_features = TransactionFeatures(
             amount=transaction.amount,
@@ -47,16 +53,18 @@ def process_transaction(transaction_id: str) -> None:
         )
         past_features, subscription_merchants = fetch_scoring_inputs(session, transaction)
 
-    history = build_history_stats(current_features, past_features, subscription_merchants)
-    scores = compute_scores(current_features, history)
+        history = build_history_stats(current_features, past_features, subscription_merchants)
+        scores = compute_scores(current_features, history)
 
-    save_analysis(
-        txn_uuid,
-        normalized_merchant=normalized_merchant,
-        normalized_category=normalized_category,
-        subscription_id=subscription_id,
-    )
-    save_scores(txn_uuid, scores)
+        save_analysis(
+            session,
+            txn_uuid,
+            normalized_merchant=normalized_merchant,
+            normalized_category=normalized_category,
+            subscription_id=subscription_id,
+        )
+        save_scores(session, txn_uuid, scores)
+        session.commit()
 
     print(
         f"Enriched transaction {transaction_id}: normalized_merchant={normalized_merchant} "

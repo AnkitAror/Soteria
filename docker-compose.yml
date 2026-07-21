@@ -30,10 +30,11 @@ services:
     build: .
     # Concurrency defaults to CPU count; each forked child that handles a
     # task keeps its DB connection open afterward (SQLAlchemy pools reuse,
-    # don't close). Supabase's session-mode pooler caps at 15 total
-    # connections across the whole app (api + worker children + beat), so
-    # concurrency has to stay well under that or a handful of concurrent
-    # tasks exhausts it — confirmed live.
+    # don't close). DATABASE_URL now points at Supabase's transaction-mode
+    # pooler (port 6543), which multiplexes far more concurrently than the
+    # 15-connection session-mode pooler (port 5432) this was originally
+    # capped against — kept at 4 anyway as a deliberately conservative
+    # default rather than because 6543 has the same hard ceiling.
     command: uv run celery -A soteria.worker.celery_app worker --loglevel=info --concurrency=4
     env_file:
       - .env
