@@ -1,1 +1,2 @@
-"""Chat service layer — deferred to a later pass."""
+"""Chat session/message persistence and per-user ownership scoping — see
+sessions.py."""

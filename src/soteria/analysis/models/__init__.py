@@ -1,1 +1,1 @@
-"""Analysis-internal data types (not DB models) — deferred to a later pass."""
+"""Analysis-internal data types (not DB models) — see scoring.py."""
