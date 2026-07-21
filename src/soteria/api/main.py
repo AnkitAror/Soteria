@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from soteria.api.routers.chat import router as chat_router
 from soteria.api.routers.dashboard import router as dashboard_router
 from soteria.api.routers.insights import router as insights_router
 from soteria.api.routers.plaid_items import router as plaid_items_router
@@ -52,6 +53,7 @@ app.include_router(transactions_router)
 app.include_router(insights_router)
 app.include_router(subscriptions_router)
 app.include_router(plaid_items_router)
+app.include_router(chat_router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 

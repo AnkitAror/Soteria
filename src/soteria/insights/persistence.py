@@ -8,15 +8,35 @@ cards instead of one. upsert_insight avoids that by comparing identity_key
 detected) against any currently-active row before deciding what to do.
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Query, Session
 
+from soteria.chat.rag.embeddings import store_embedding
+from soteria.db.models.embeddings import EmbeddingObjectType
 from soteria.db.models.insights import Insight
 from soteria.db.session import SessionLocal
 from soteria.insights.models.aggregates import InsightDraft, severity_rank
+
+logger = logging.getLogger(__name__)
+
+
+def _embed_insight(user_id: uuid.UUID, insight: Insight) -> None:
+    """Best-effort: makes the insight retrievable by the chatbot's RAG
+    context (chat/rag/retrieval.py). A failure here should never break
+    insight persistence."""
+    try:
+        store_embedding(
+            user_id,
+            EmbeddingObjectType.INSIGHT,
+            insight.id,
+            f"{insight.title}: {insight.description}",
+        )
+    except Exception:
+        logger.exception("Failed to embed insight %s; continuing without it", insight.id)
 
 
 def _active_insights_query(
@@ -62,6 +82,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
             session.add(insight)
             session.commit()
             session.refresh(insight)
+            _embed_insight(user_id, insight)
             return insight
 
         existing_signature = (existing.metadata_json or {}).get("value_signature")
@@ -79,6 +100,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
             existing.expires_at = now + timedelta(days=draft.expires_in_days)
             session.commit()
             session.refresh(existing)
+            _embed_insight(user_id, existing)
             return existing
 
         # The finding changed materially (e.g. a further subscription price
@@ -100,6 +122,7 @@ def upsert_insight(user_id: uuid.UUID, draft: InsightDraft) -> Insight:
         session.add(insight)
         session.commit()
         session.refresh(insight)
+        _embed_insight(user_id, insight)
         return insight
 
 

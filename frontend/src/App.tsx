@@ -3,6 +3,7 @@ import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { AccountManagement } from './pages/AccountManagement'
+import { Chat } from './pages/Chat'
 import { Dashboard } from './pages/Dashboard'
 import { Insights } from './pages/Insights'
 import { Login } from './pages/Login'
@@ -61,6 +62,16 @@ function App() {
               <ProtectedRoute>
                 <AppShell>
                   <AccountManagement />
+                </AppShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <AppShell>
+                  <Chat />
                 </AppShell>
               </ProtectedRoute>
             }

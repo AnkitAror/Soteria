@@ -21,4 +21,6 @@ class ChatSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     title: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="chat_sessions")
-    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="session")
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )

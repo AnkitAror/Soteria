@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { label: 'Insights', to: '/insights' },
   { label: 'Subscriptions', to: '/subscriptions' },
   { label: 'Account Management', to: '/account' },
+  { label: 'Chat', to: '/chat' },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {

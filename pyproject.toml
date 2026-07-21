@@ -16,6 +16,8 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "cryptography>=43",
     "pyjwt>=2.9",
+    "google-genai>=1.2",
+    "sqlglot>=25.0",
 ]
 
 [dependency-groups]
@@ -79,6 +81,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "plaid.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.genai.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sqlglot.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

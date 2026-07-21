@@ -4,6 +4,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from soteria.db.base import Base
@@ -17,7 +18,7 @@ class ChatMessage(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "chat_messages"
 
     session_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("chat_sessions.id"), nullable=False, index=True
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(String, nullable=False)
@@ -26,5 +27,9 @@ class ChatMessage(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     # references/db_schema.md's execution safety note. Enforced at the app/infra
     # layer, not by this column.
     sql_generated: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Structured Citation list from chat/orchestration/answer_synthesis.py,
+    # stored verbatim so citations persist with the message without being
+    # recomputed on reload.
+    citations_json: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")

@@ -104,3 +104,33 @@ export interface InstitutionSummary {
 export interface InstitutionsResponse {
   institutions: InstitutionSummary[]
 }
+
+export interface ChatSessionSummary {
+  id: string
+  title: string | null
+  updated_at: string
+}
+
+export interface ChatSessionsResponse {
+  sessions: ChatSessionSummary[]
+}
+
+export interface Citation {
+  type: string
+  ref_id: string | null
+  label: string
+  detail: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: string
+  message: string
+  sql_generated: string | null
+  citations: Citation[]
+  created_at: string
+}
+
+export interface ChatMessagesResponse {
+  messages: ChatMessage[]
+}

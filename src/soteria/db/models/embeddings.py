@@ -22,7 +22,8 @@ class EmbeddingObjectType(enum.StrEnum):
     CHAT_MESSAGE = "chat_message"
 
 
-# Sized for OpenAI text-embedding-3-small; adjust if a different model is chosen.
+# Sized for Gemini's gemini-embedding-001 with output_dimensionality=1536
+# (see chat/rag/embeddings.py); adjust if a different model is chosen.
 EMBEDDING_DIMENSIONS = 1536
 
 
