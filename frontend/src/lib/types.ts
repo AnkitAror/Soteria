@@ -134,3 +134,9 @@ export interface ChatMessage {
 export interface ChatMessagesResponse {
   messages: ChatMessage[]
 }
+
+export interface ChatUsage {
+  used: number
+  limit: number
+  remaining: number
+}

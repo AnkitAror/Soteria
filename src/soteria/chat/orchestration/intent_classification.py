@@ -13,7 +13,7 @@ from enum import StrEnum
 from google.genai import types
 from pydantic import BaseModel
 
-from soteria.chat.gemini_client import get_client
+from soteria.chat.gemini_client import generate_content
 from soteria.core.config import get_settings
 
 _SYSTEM_INSTRUCTION = """
@@ -56,7 +56,7 @@ _NEEDS_CONTEXT = {_IntentCategory.EXPLAIN_OR_ADVICE, _IntentCategory.DATA_QUERY_
 
 
 def classify_intent(question: str) -> Intent:
-    response = get_client().models.generate_content(
+    response = generate_content(
         model=get_settings().gemini_chat_model,
         contents=question,
         config=types.GenerateContentConfig(

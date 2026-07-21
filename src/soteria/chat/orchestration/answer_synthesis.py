@@ -12,7 +12,7 @@ from decimal import Decimal
 from google.genai import types
 from pydantic import BaseModel
 
-from soteria.chat.gemini_client import get_client
+from soteria.chat.gemini_client import generate_content
 from soteria.chat.types import AnswerWithCitations, Citation, RetrievedItem
 from soteria.core.config import get_settings
 
@@ -70,7 +70,7 @@ def synthesize_answer(
     if not sql_rows and not retrieved_context:
         prompt_parts.append("No data or context was retrieved for this question.")
 
-    response = get_client().models.generate_content(
+    response = generate_content(
         model=get_settings().gemini_chat_model,
         contents="\n\n".join(prompt_parts),
         config=types.GenerateContentConfig(

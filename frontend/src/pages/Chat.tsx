@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../lib/api'
-import type { ChatMessage, ChatSessionSummary, ChatSessionsResponse, ChatMessagesResponse } from '../lib/types'
+import type {
+  ChatMessage,
+  ChatSessionSummary,
+  ChatSessionsResponse,
+  ChatMessagesResponse,
+  ChatUsage,
+} from '../lib/types'
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
@@ -11,6 +17,12 @@ function formatTime(iso: string) {
   })
 }
 
+function usageStyle(usage: ChatUsage) {
+  if (usage.remaining <= 0) return 'text-red-600 dark:text-red-400'
+  if (usage.remaining / usage.limit <= 0.3) return 'text-amber-600 dark:text-amber-400'
+  return 'text-gray-400 dark:text-gray-500'
+}
+
 export function Chat() {
   const [sessions, setSessions] = useState<ChatSessionSummary[] | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -19,7 +31,16 @@ export function Chat() {
   const [sending, setSending] = useState(false)
   const [question, setQuestion] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [usage, setUsage] = useState<ChatUsage | null>(null)
   const threadEndRef = useRef<HTMLDivElement>(null)
+
+  const loadUsage = useCallback(async () => {
+    try {
+      setUsage(await apiFetch<ChatUsage>('/api/chat/usage'))
+    } catch {
+      // non-critical: leave the badge hidden rather than surfacing an error
+    }
+  }, [])
 
   const loadSessions = useCallback(async (selectId?: string) => {
     try {
@@ -37,7 +58,8 @@ export function Chat() {
 
   useEffect(() => {
     void loadSessions()
-  }, [loadSessions])
+    void loadUsage()
+  }, [loadSessions, loadUsage])
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -120,6 +142,7 @@ export function Chat() {
       )
       setMessages((current) => [...(current ?? []), assistantMessage])
       void loadSessions(sessionId)
+      void loadUsage()
     } catch {
       setError('Could not get an answer. Try again.')
     } finally {
@@ -172,10 +195,15 @@ export function Chat() {
       </aside>
 
       <div className="flex flex-1 flex-col rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        {error && (
-          <p className="border-b border-gray-100 px-5 py-2 text-sm text-red-600 dark:border-gray-800 dark:text-red-400">
-            {error}
-          </p>
+        {(error || usage) && (
+          <div className="flex items-center gap-4 border-b border-gray-100 px-5 py-2 dark:border-gray-800">
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            {usage && (
+              <span className={`ml-auto shrink-0 text-xs font-medium ${usageStyle(usage)}`}>
+                {usage.used} / {usage.limit} Gemini requests used today
+              </span>
+            )}
+          </div>
         )}
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5">

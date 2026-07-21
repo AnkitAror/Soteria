@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_chat_model: str = "gemini-flash-latest"
     gemini_embedding_model: str = "gemini-embedding-001"
+    # Free-tier daily request cap observed for this project (see
+    # chat/usage.py) -- raise this if you enable billing.
+    gemini_daily_request_limit: int = 20
 
 
 @lru_cache

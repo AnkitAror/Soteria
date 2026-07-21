@@ -14,6 +14,7 @@ from soteria.chat.services.sessions import (
     list_sessions,
     rename_session,
 )
+from soteria.chat.usage import get_usage_today
 from soteria.core.auth import get_current_user_id
 from soteria.db.models.chat_messages import ChatMessage
 from soteria.db.models.chat_sessions import ChatSession
@@ -63,6 +64,12 @@ class AskQuestionRequest(BaseModel):
     question: str
 
 
+class UsageResponse(BaseModel):
+    used: int
+    limit: int
+    remaining: int
+
+
 def _session_summary(session: ChatSession) -> ChatSessionSummary:
     return ChatSessionSummary(
         id=str(session.id),
@@ -80,6 +87,12 @@ def _message_out(message: ChatMessage) -> ChatMessageOut:
         citations=[CitationOut(**c) for c in (message.citations_json or [])],
         created_at=message.created_at.isoformat(),
     )
+
+
+@router.get("/chat/usage")
+def get_chat_usage(user_id: uuid.UUID = Depends(get_current_user_id)) -> UsageResponse:
+    status = get_usage_today()
+    return UsageResponse(used=status.used, limit=status.limit, remaining=status.remaining)
 
 
 @router.get("/chat/sessions")

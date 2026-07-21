@@ -10,7 +10,7 @@ sql_safety.validate_sql before it's ever executed.
 from google.genai import types
 from pydantic import BaseModel
 
-from soteria.chat.gemini_client import get_client
+from soteria.chat.gemini_client import generate_content
 from soteria.chat.types import ChatTurn
 from soteria.core.config import get_settings
 
@@ -38,7 +38,7 @@ class _SqlResponse(BaseModel):
 def generate_sql(question: str, schema: str, history: list[ChatTurn]) -> str:
     contents = [f"{turn.role}: {turn.content}" for turn in history] + [f"user: {question}"]
 
-    response = get_client().models.generate_content(
+    response = generate_content(
         model=get_settings().gemini_chat_model,
         contents="\n".join(contents),
         config=types.GenerateContentConfig(

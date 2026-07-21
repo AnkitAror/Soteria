@@ -9,6 +9,7 @@ from soteria.db.models import (
     chat_messages,
     chat_sessions,
     embeddings,
+    gemini_usage,
     insights,
     merchant_profiles,
     plaid_items,

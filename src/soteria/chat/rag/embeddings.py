@@ -13,14 +13,14 @@ import uuid
 from google.genai import types
 from sqlalchemy import select
 
-from soteria.chat.gemini_client import get_client
+from soteria.chat.gemini_client import embed_content
 from soteria.core.config import get_settings
 from soteria.db.models.embeddings import EMBEDDING_DIMENSIONS, Embedding, EmbeddingObjectType
 from soteria.db.session import SessionLocal
 
 
 def embed_text(text: str) -> list[float]:
-    response = get_client().models.embed_content(
+    response = embed_content(
         model=get_settings().gemini_embedding_model,
         contents=text,
         config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIMENSIONS),
