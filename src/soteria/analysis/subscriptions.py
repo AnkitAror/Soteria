@@ -11,6 +11,7 @@ from decimal import Decimal
 from plaid.model.transaction_stream import TransactionStream
 from sqlalchemy.orm import Session
 
+from soteria.analysis.scoring_cache import invalidate_history
 from soteria.analysis.services.merchant_normalization import normalize_merchant
 from soteria.analysis.transaction_analysis import save_analysis
 from soteria.db.models.subscriptions import Subscription, SubscriptionStatus
@@ -87,8 +88,16 @@ def find_active_subscription(
 
 
 def link_transactions_to_subscription(
-    subscription_id: uuid.UUID, plaid_transaction_ids: list[str]
+    subscription_id: uuid.UUID, user_id: uuid.UUID, plaid_transaction_ids: list[str]
 ) -> int:
+    """Retroactively sets transaction_analysis.subscription_id for transactions
+    that were already scored before this subscription was detected -- this can
+    run well after those transactions' scoring history was cached (subscription
+    detection is dispatched after a sync batch's process_transaction tasks), so
+    it must invalidate that cache: without it, is_known_subscription_merchant
+    (feeds the smart-purchase score's recurring bonus) would silently lag
+    behind reality until the cache's TTL expires.
+    """
     with SessionLocal() as session:
         transaction_ids = [
             row[0]
@@ -99,4 +108,7 @@ def link_transactions_to_subscription(
         for transaction_id in transaction_ids:
             save_analysis(session, transaction_id, subscription_id=subscription_id)
         session.commit()
+
+    if transaction_ids:
+        invalidate_history(user_id)
     return len(transaction_ids)

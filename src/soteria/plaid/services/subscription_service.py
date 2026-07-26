@@ -29,6 +29,8 @@ def detect_subscriptions(plaid_item: PlaidItem) -> list[Subscription]:
     subscriptions = []
     for stream in streams:
         subscription = save_subscription(plaid_item.user_id, stream)
-        link_transactions_to_subscription(subscription.id, stream.transaction_ids)
+        link_transactions_to_subscription(
+            subscription.id, subscription.user_id, stream.transaction_ids
+        )
         subscriptions.append(subscription)
     return subscriptions

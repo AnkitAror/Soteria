@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # chat/usage.py) -- raise this if you enable billing.
     gemini_daily_request_limit: int = 20
 
+    # Redis-cached per-user scoring history (analysis/scoring_cache.py) --
+    # kill switch for a live scoring-pipeline change; flip to false to
+    # revert to the Postgres-only path with no deploy needed.
+    scoring_cache_enabled: bool = True
+    # Backstop against any invalidation path not yet identified -- not the
+    # primary correctness mechanism (the explicit invalidation call sites
+    # in transactions.py/subscriptions.py are that).
+    scoring_cache_ttl_seconds: int = 172800
+
 
 @lru_cache
 def get_settings() -> Settings:

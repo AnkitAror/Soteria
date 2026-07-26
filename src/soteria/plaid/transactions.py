@@ -12,6 +12,7 @@ from plaid.model.removed_transaction import RemovedTransaction
 from plaid.model.transaction import Transaction as PlaidTransaction
 from sqlalchemy.orm import Session
 
+from soteria.analysis.scoring_cache import invalidate_history
 from soteria.db.models.bank_accounts import BankAccount
 from soteria.db.models.plaid_items import PlaidItem
 from soteria.db.models.transactions import Transaction
@@ -108,7 +109,13 @@ def save_modified_transactions(
         session.commit()
         for transaction in updated:
             session.refresh(transaction)
-        return updated
+
+    # After commit: a concurrent cache-miss reader must never be able to
+    # re-read stale pre-commit Postgres state and repopulate the cache with
+    # the staleness this is meant to clear.
+    if updated:
+        invalidate_history(plaid_item.user_id)
+    return updated
 
 
 def soft_delete_removed_transactions(removed: list[RemovedTransaction]) -> int:
@@ -122,8 +129,14 @@ def soft_delete_removed_transactions(removed: list[RemovedTransaction]) -> int:
             .all()
         )
         now = datetime.now(UTC)
+        # Captured before commit expires these ORM attributes.
+        affected_user_ids = {row.user_id for row in rows if row.removed_at is None}
         for row in rows:
             if row.removed_at is None:
                 row.removed_at = now
         session.commit()
-        return len(rows)
+        count = len(rows)
+
+    for user_id in affected_user_ids:
+        invalidate_history(user_id)
+    return count

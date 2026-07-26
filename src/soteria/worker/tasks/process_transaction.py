@@ -8,6 +8,7 @@ database. Matches the same id-passing pattern as plaid.sync_plaid_item.
 import uuid
 
 from soteria.analysis.models.scoring import TransactionFeatures
+from soteria.analysis.scoring_cache import append_to_history
 from soteria.analysis.services.categorization import categorize_transaction
 from soteria.analysis.services.merchant_normalization import normalize_merchant
 from soteria.analysis.services.scoring import build_history_stats, compute_scores
@@ -51,6 +52,11 @@ def process_transaction(transaction_id: str) -> None:
             normalized_merchant=normalized_merchant,
             normalized_category=normalized_category,
         )
+        # Captured now, not after the `with` block -- commit() expires ORM
+        # attributes by default, and the block's __exit__ closes the
+        # session, so transaction.user_id would raise DetachedInstanceError
+        # if read after this point.
+        user_id = transaction.user_id
         past_features, subscription_merchants = fetch_scoring_inputs(session, transaction)
 
         history = build_history_stats(current_features, past_features, subscription_merchants)
@@ -65,6 +71,10 @@ def process_transaction(transaction_id: str) -> None:
         )
         save_scores(session, txn_uuid, scores)
         session.commit()
+
+    # After commit, not before: the cache should only ever reflect durably
+    # committed state.
+    append_to_history(user_id, txn_uuid, current_features)
 
     print(
         f"Enriched transaction {transaction_id}: normalized_merchant={normalized_merchant} "
